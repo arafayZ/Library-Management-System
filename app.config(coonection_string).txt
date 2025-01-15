@@ -1,0 +1,5 @@
+<connectionStrings>
+		<add name="LibraryDBConnection"
+			 connectionString="Server=localhost;Database=LibraryDB;Integrated Security=True;"
+			 providerName="System.Data.SqlClient" />
+	</connectionStrings>

@@ -1,0 +1,1462 @@
+using System;
+using System.Data;
+using System.Configuration;
+using System.Collections.Generic;
+using System.Data.SqlClient;
+using Dapper;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace librarymangementsystem
+{
+    public class DatabaseHelper
+    {
+        // Connection string from App.config file
+        private string connectionString = ConfigurationManager.ConnectionStrings["LibraryDBConnection"].ConnectionString;
+
+        // Method to get database connection
+        public SqlConnection GetConnection()
+        {
+            return new SqlConnection(connectionString);
+        }
+
+        // Method to execute an SQL query (DML, DQL queries)
+        public void ExecuteQuery(string query)
+        {
+            using (var connection = GetConnection())
+            {
+                connection.Open();
+                connection.Execute(query);
+            }
+        }
+
+        // Method to fetch data (DQL queries) using Dapper
+        public IEnumerable<T> GetData<T>(string query)
+        {
+            using (var connection = GetConnection())
+            {
+                connection.Open();
+                return connection.Query<T>(query);
+            }
+        }
+    }
+    public class Book
+    {
+        public int BookID { get; set; }
+        public string Title { get; set; }
+        public string Author { get; set; }
+        public string ISBN { get; set; }
+        public int YearOfPublication { get; set; }
+        public int AvailableCopies { get; set; }
+        public int CategoryID { get; set; }
+        public int LibrarianID { get; set; }  // Foreign key to Librarian
+    }
+
+    public class MembershipType
+    {
+        public int MembershipTypeID { get; set; }
+        public string name { get; set; }
+        public decimal Charges { get; set; }
+        public int AllowedReturnDays { get; set; }
+    }
+
+    public class Member
+    {
+        public int MemberID { get; set; }
+        public string Name { get; set; }
+        public string Email { get; set; }
+        public int MembershipTypeID { get; set; } // Foreign key
+        public int LibrarianID { get; set; }  // Foreign key to Librarian
+        public string ContactNumber { get; set; }
+    }
+
+
+
+    public class Librarian
+    {
+        public int LibrarianID { get; set; }
+        public string Username { get; set; }
+        public string Password { get; set; }
+        public string Name { get; set; }
+        public string ContactInfo { get; set; }
+    }
+
+    public class BorrowTransaction
+    {
+        public int TransactionID { get; set; }
+        public int MemberID { get; set; } // Foreign key to Member
+        public int BookID { get; set; } // Foreign key to Book
+        public DateTime DateBorrowed { get; set; }
+        public DateTime DueDate { get; set; }
+        public DateTime? ReturnDate { get; set; } // Nullable, can be null until book is returned
+    }
+
+    public class Fine
+    {
+        public int FineID { get; set; }
+        public int TransactionID { get; set; } // Foreign key to BorrowTransaction
+        public decimal FineAmount { get; set; }
+        public bool PaymentStatus { get; set; } // True if paid, False if not paid
+    }
+
+    public class Category
+    {
+        public int CategoryID { get; set; }
+        public string CategoryName { get; set; }
+    }
+
+    public class MemberViewModel
+    {
+        public int MemberID { get; set; }
+        public string Name { get; set; }
+        public string Email { get; set; }
+        public int MembershipTypeID { get; set; }
+        public string MembershipType { get; set; }  // For MembershipType name
+        public string ContactNumber { get; set; }
+        public int LibrarianID { get; set; }
+        public string LibrarianName { get; set; }  // For Librarian name
+    }
+
+    public class BookViewModel
+    {
+        public int BookID { get; set; }
+        public string Title { get; set; }
+        public string Author { get; set; }
+        public string ISBN { get; set; }
+        public int AvailableCopies { get; set; }
+        public int CategoryID { get; set; }
+        public string CategoryName { get; set; }
+        public int LibrarianID { get; set; }
+        public string LibrarianName { get; set; }
+    }
+
+
+
+
+    public class LibraryManagementSystem
+    {
+        private string connectionString = ConfigurationManager.ConnectionStrings["LibraryDBConnection"].ConnectionString;
+
+        public List<Book> Books = new List<Book>();
+        public List<Member> Members = new List<Member>();
+        public List<Librarian> Librarians = new List<Librarian>();
+        public List<BorrowTransaction> BorrowTransactions = new List<BorrowTransaction>();
+        public List<Fine> Fines = new List<Fine>();
+        public List<Category> Categories = new List<Category>();
+        private Librarian currentLibrarian;
+        public List<MembershipType> MembershipTypes { get; set; } = new List<MembershipType> { };
+        public bool LibrarianLogin()
+        {
+            Console.WriteLine("==== Librarian Login ====");
+            Console.Write("Enter Username: ");
+            string username = Console.ReadLine().Trim();
+            Console.Write("Enter Password: ");
+            string password = Console.ReadLine().Trim();
+
+            // Define the SQL query to fetch the librarian by username and password
+            string query = "SELECT * FROM librarian WHERE username = @Username AND password = @Password";//DQL
+
+            using (var connection = new SqlConnection(connectionString))
+            {
+                try
+                {
+                    connection.Open();
+
+                    // Execute the query using Dapper and check if a matching librarian exists
+                    var librarian = connection.QueryFirstOrDefault<Librarian>(query, new { Username = username, Password = password });
+
+                    if (librarian != null)
+                    {
+                        currentLibrarian = librarian; // Set the current librarian
+                        Console.WriteLine($"Welcome, {librarian.Name}!");
+                        return true;
+                    }
+                    else
+                    {
+                        Console.WriteLine("Invalid login. Try again.");
+                        return false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"An error occurred: {ex.Message}");
+                    return false;
+                }
+            }
+        }
+
+        public void DisplayMenu()
+        {
+            Console.WriteLine("\n==== Library Management System ====");
+            Console.WriteLine("1.  Add Category");
+            Console.WriteLine("2.  Add a Book");
+            Console.WriteLine("3.  Add a Member");
+            Console.WriteLine("4.  Borrow a Book");
+            Console.WriteLine("5.  Return a Book");
+            Console.WriteLine("6.  Remove a Book");
+            Console.WriteLine("7.  Update a Book");
+            Console.WriteLine("8.  Remove a Member");
+            Console.WriteLine("9.  Update a Member");
+            Console.WriteLine("10. View All Books");
+            Console.WriteLine("11. View All Members");
+            Console.WriteLine("12. View Borrow Transactions");
+            Console.WriteLine("13. View Return Details");
+            Console.WriteLine("14. View All Categories Details");
+            Console.WriteLine("15. View Membership-Type");
+            Console.WriteLine("16. Fine");
+            Console.WriteLine("17. Exit");
+
+
+            Console.Write("=====Select an option (1-17)===== ");
+        }
+
+        public void Run()
+        {
+            bool isLoggedIn = false;
+
+            // Attempt login until successful
+            while (!isLoggedIn)
+            {
+                isLoggedIn = LibrarianLogin();
+            }
+
+            int choice = 0;
+            do
+            {
+                DisplayMenu();
+                bool isValidInput = int.TryParse(Console.ReadLine(), out choice);
+
+                if (isValidInput)
+                {
+                    switch (choice)
+                    {
+                        case 1:
+                            AddCategory();
+                            break;
+                        case 2:
+                            AddBook();
+                            break;
+                        case 3:
+                            AddMember();
+                            break;
+                        case 4:
+                            BorrowBook();
+                            break;
+                        case 5:
+                            ReturnBook();
+                            break;
+                        case 6:
+                            AddCategory();
+                            break;
+                        case 7:
+                            AddCategory();
+                            break;
+                        case 8:
+                            AddCategory();
+                            break;
+                        case 9:
+                            AddCategory();
+                            break;
+                        case 10:
+                            ViewAllBooks();
+                            break;
+                        case 11:
+                            ViewAllMembers();
+                            break;
+                        case 12:
+                            ViewBorrowTransactions();
+                            break;
+                        case 13:
+                            ViewReturnDetails();
+                            break;
+                        case 14:
+                            ViewCategories();
+                            break;
+                        case 15:
+                            ViewMembershipTypes();
+                            break;
+                        case 16:
+                            ImposeFine();
+                            break;
+                        case 17:
+                            Console.WriteLine("Exiting the system...");
+                            break;
+                        default:
+                            Console.WriteLine("Invalid choice. Try again.");
+                            break;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Please enter a valid number.");
+                }
+
+            } while (choice != 16);
+        }
+
+        // Methods
+        public void AddCategory()
+        {
+            Console.Write("Enter Category Name: ");
+            string categoryName = Console.ReadLine().Trim();
+
+            // Validate the input
+            if (string.IsNullOrEmpty(categoryName))
+            {
+                Console.WriteLine("Category name cannot be empty. Please enter a valid category name.");
+                return;
+            }
+
+            try
+            {
+                // Define the SQL INSERT query to add the category to the database
+                string query = "INSERT INTO Category (CategoryName) VALUES (@CategoryName)";//DML
+
+                // Create parameters for the query
+                var parameters = new { CategoryName = categoryName };
+
+                // Execute the query using Dapper
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+                    connection.Execute(query, parameters); // Execute the query with parameters
+                }
+
+                Console.WriteLine($"Category '{categoryName}' added successfully.");
+            }
+            catch (SqlException ex)
+            {
+                Console.WriteLine($"SQL Error: {ex.Message}. Please check your database connection or query.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An unexpected error occurred: {ex.Message}");
+            }
+        }
+
+        public void AddBook()
+        {
+            Console.WriteLine("\n==== Add a New Book ====");
+
+            try
+            {
+                Console.Write("Enter Title: ");
+                string title = Console.ReadLine().Trim();
+                if (string.IsNullOrEmpty(title))
+                {
+                    throw new ArgumentException("Title cannot be empty.");
+                }
+
+                Console.Write("Enter Author: ");
+                string author = Console.ReadLine().Trim();
+                if (string.IsNullOrEmpty(author))
+                {
+                    throw new ArgumentException("Author cannot be empty.");
+                }
+
+                Console.Write("Enter ISBN: ");
+                string isbn = Console.ReadLine().Trim();
+                if (string.IsNullOrEmpty(isbn))
+                {
+                    throw new ArgumentException("ISBN cannot be empty.");
+                }
+
+                Console.Write("Enter Year of Publication: ");
+                if (!int.TryParse(Console.ReadLine().Trim(), out int yearOfPublication) || yearOfPublication < 1 || yearOfPublication > DateTime.Now.Year)
+                {
+                    throw new ArgumentException("Invalid Year of Publication. Please enter a valid year.");
+                }
+
+                Console.Write("Enter Available Copies: ");
+                if (!int.TryParse(Console.ReadLine().Trim(), out int availableCopies) || availableCopies < 0)
+                {
+                    throw new ArgumentException("Available Copies must be a non-negative number.");
+                }
+
+                Console.Write("Enter Category ID: ");
+                if (!int.TryParse(Console.ReadLine().Trim(), out int categoryId))
+                {
+                    throw new ArgumentException("Invalid Category ID. Please enter a valid number.");
+                }
+
+                // Ensure that a valid librarian is logged in
+                int librarianID = currentLibrarian != null ? currentLibrarian.LibrarianID : 0;
+                if (librarianID == 0)
+                {
+                    throw new InvalidOperationException("No librarian is currently logged in.");
+                }
+
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+
+                    // Check if the category exists
+                    string categoryCheckQuery = "SELECT COUNT(*) FROM category WHERE categoryID = @CategoryID";//ADVANCED DQL
+                    int categoryExists = connection.ExecuteScalar<int>(categoryCheckQuery, new { CategoryID = categoryId });
+                    if (categoryExists == 0)
+                    {
+                        Console.WriteLine($"Error: Category ID {categoryId} does not exist. Please enter a valid Category ID.");
+                        return;
+                    }
+
+                    // Check for duplicate ISBN
+                    string isbnCheckQuery = "SELECT COUNT(*) FROM book WHERE ISBN = @ISBN";//ADVANCED DQL
+                    int isbnExists = connection.ExecuteScalar<int>(isbnCheckQuery, new { ISBN = isbn });
+                    if (isbnExists > 0)
+                    {
+                        string existingTitleQuery = "SELECT title FROM book WHERE ISBN = @ISBN";// DQL
+                        string existingBookTitle = connection.ExecuteScalar<string>(existingTitleQuery, new { ISBN = isbn });
+                        Console.WriteLine($"Error: The ISBN '{isbn}' already exists for the book '{existingBookTitle}'.");
+                        return;
+                    }
+
+                    // Insert the new book
+                    string insertQuery = @"
+                INSERT INTO book (title, author, ISBN, yearofpublication, availablecopies, categoryID, librarianID) 
+                VALUES (@Title, @Author, @ISBN, @YearOfPublication, @AvailableCopies, @CategoryID, @LibrarianID)";//DML
+
+                    var parameters = new
+                    {
+                        Title = title,
+                        Author = author,
+                        ISBN = isbn,
+                        YearOfPublication = yearOfPublication,
+                        AvailableCopies = availableCopies,
+                        CategoryID = categoryId,
+                        LibrarianID = librarianID
+                    };
+
+                    connection.Execute(insertQuery, parameters);
+                    Console.WriteLine("Book added successfully.");
+                }
+            }
+            catch (ArgumentException ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+            catch (FormatException)
+            {
+                Console.WriteLine("Error: Invalid input format. Please enter valid values.");
+            }
+            catch (SqlException)
+            {
+                Console.WriteLine("Error: Unable to add the book due to a database error. Please check your database and try again.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An unexpected error occurred: {ex.Message}");
+            }
+        }
+
+
+
+        public void AddMember()
+        {
+            Console.WriteLine("\n==== Add a New Member ====");
+
+            try
+            {
+                // Validate Name
+                Console.Write("Enter Name: ");
+                string name = Console.ReadLine().Trim();
+                if (string.IsNullOrEmpty(name) || !System.Text.RegularExpressions.Regex.IsMatch(name, @"^[a-zA-Z\s]+$"))
+                {
+                    throw new ArgumentException("Name must only contain alphabetic characters and cannot be empty.");
+                }
+
+                // Validate Email
+                Console.Write("Enter Email: ");
+                string email = Console.ReadLine().Trim();
+                if (string.IsNullOrEmpty(email) || !System.Text.RegularExpressions.Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+                {
+                    throw new ArgumentException("Invalid email format. Please enter a valid email address.");
+                }
+
+                // Validate Contact Number
+                Console.Write("Enter Contact Number: ");
+                string contactNumber = Console.ReadLine().Trim();
+                if (string.IsNullOrEmpty(contactNumber) || !System.Text.RegularExpressions.Regex.IsMatch(contactNumber, @"^\d+$"))
+                {
+                    throw new ArgumentException("Contact Number must only contain digits and cannot be empty.");
+                }
+
+                // Validate Membership Type ID
+                Console.Write("Enter Membership Type ID (1 for Regular, 2 for Premium, 3 for Student): ");
+                if (!int.TryParse(Console.ReadLine().Trim(), out int membershipTypeId) || membershipTypeId < 1 || membershipTypeId > 3)
+                {
+                    throw new ArgumentException("Invalid Membership Type ID.");
+                }
+
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+
+                    // Check if the email already exists in the database
+                    string emailCheckQuery = "SELECT COUNT(1) FROM member WHERE email = @Email";//ADVANCED DQL
+                    int emailExists = connection.ExecuteScalar<int>(emailCheckQuery, new { Email = email });
+
+                    if (emailExists > 0)
+                    {
+                        Console.WriteLine($"Error: The email '{email}' is already associated with another member. Please use a different email.");
+                        return;
+                    }
+
+                    // Prepare the SQL query to insert the new member into the database
+                    string query = @"
+                INSERT INTO member (name, email, contact, membershiptypeID, librarianID) 
+                VALUES (@Name, @Email, @ContactNumber, @MembershipTypeID, @LibrarianID)";//DML
+
+                    var parameters = new
+                    {
+                        Name = name,
+                        Email = email,
+                        ContactNumber = contactNumber,
+                        MembershipTypeID = membershipTypeId,
+                        LibrarianID = currentLibrarian?.LibrarianID ?? 0 // Assign librarian ID if logged in
+                    };
+
+                    connection.Execute(query, parameters);
+
+                    Console.WriteLine("Member added successfully.");
+                }
+            }
+            catch (ArgumentException ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+            catch (FormatException)
+            {
+                Console.WriteLine("Error: Invalid input format. Please enter valid values.");
+            }
+            catch (SqlException)
+            {
+                Console.WriteLine("Error: A database error occurred. Please check your data or try again.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An unexpected error occurred: {ex.Message}");
+            }
+        }
+
+
+        public void BorrowBook()
+        {
+            Console.WriteLine("\n==== Borrow a Book ====");
+
+            try
+            {
+                Console.Write("Enter Member ID: ");
+                if (!int.TryParse(Console.ReadLine(), out int memberID))
+                {
+                    throw new FormatException("Invalid input for Member ID. Please enter a number.");
+                }
+
+                // Check if member exists
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+                    //ADVANCED DQL
+                    var memberExists = connection.ExecuteScalar<int>("SELECT COUNT(1) FROM member WHERE MemberID = @MemberID", new { MemberID = memberID }) > 0;
+
+                    if (!memberExists)
+                    {
+                        throw new ArgumentException("You are not a registered member. Please become a member first.");
+                    }
+                }
+
+                Console.Write("Enter Book ID: ");
+                if (!int.TryParse(Console.ReadLine(), out int bookID))
+                {
+                    throw new FormatException("Invalid input for Book ID. Please enter a number.");
+                }
+
+                // Check if book exists and is available
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+                    //DQL
+                    var bookAvailable = connection.ExecuteScalar<int>("SELECT AvailableCopies FROM book WHERE BookID = @BookID", new { BookID = bookID }) > 0;
+
+                    if (!bookAvailable)
+                    {
+                        throw new ArgumentException("No copies of this book are currently available.");
+                    }
+
+                    // Execute the BorrowBook stored procedure
+                    var parameters = new DynamicParameters();
+                    parameters.Add("@MemberID", memberID);
+                    parameters.Add("@BookID", bookID);
+                    parameters.Add("@DateBorrowed", DateTime.Now);
+
+                    connection.Execute("BorrowBookProcedure", parameters, commandType: CommandType.StoredProcedure);//PROCEDURE
+                }
+
+                Console.WriteLine("Book borrowed successfully.");
+            }
+            catch (ArgumentException ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+            catch (FormatException ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An unexpected error occurred: {ex.Message}");
+            }
+        }
+
+
+
+        public void ReturnBook()
+        {
+            Console.WriteLine("\n==== Return Book ====");
+
+            try
+            {
+                Console.Write("Enter Transaction ID: ");
+                if (!int.TryParse(Console.ReadLine(), out int transactionID))
+                {
+                    throw new ArgumentException("Invalid Transaction ID.");
+                }
+
+                // Check if the Transaction ID exists
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+
+                    // First check if the Transaction ID exists
+                    var command = new SqlCommand("SELECT COUNT(*) FROM borrowtransaction WHERE borrowTransactionID = @TransactionID", connection);//ADVANCED DQL
+                    command.Parameters.AddWithValue("@TransactionID", transactionID);
+                    int count = (int)command.ExecuteScalar();
+
+                    if (count == 0)
+                    {
+                        throw new ArgumentException("Transaction ID does not exist.");
+                    }
+
+                    // Then check if the book has already been returned (i.e., returnDate is not NULL)
+                    command.CommandText = "SELECT returnDate FROM borrowtransaction WHERE borrowTransactionID = @TransactionID";//DQL
+                    var returnDate = command.ExecuteScalar();
+
+                    if (returnDate != DBNull.Value)
+                    {
+                        throw new ArgumentException("This book has already been returned.");
+                    }
+                }
+
+                // If the Transaction ID exists and the book hasn't been returned, proceed to return the book
+                DateTime returnDateNow = DateTime.Now;
+
+                // Call stored procedure to update return date and available copies
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+                    var command = new SqlCommand("ReturnBookProcedure", connection);
+                    command.CommandType = CommandType.StoredProcedure;
+                    command.Parameters.AddWithValue("@TransactionID", transactionID);
+                    command.ExecuteNonQuery();
+                }
+
+                Console.WriteLine("Book returned successfully.");
+            }
+            catch (ArgumentException ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An unexpected error occurred: {ex.Message}");
+            }
+        }
+
+
+        public void RemoveBook()
+        {
+            Console.WriteLine("\n==== Remove Book ====");
+
+            try
+            {
+                Console.Write("Enter Book ID: ");
+                if (!int.TryParse(Console.ReadLine(), out int bookID))
+                {
+                    Console.WriteLine("Invalid Book ID format. Please enter a numeric value.");
+                    return;
+                }
+
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+
+                    // Check if the book exists
+                    string checkQuery = "SELECT COUNT(1) FROM book WHERE bookID = @BookID";//ADVANCED DQL
+                    int bookExists = connection.ExecuteScalar<int>(checkQuery, new { BookID = bookID });
+
+                    if (bookExists == 0)
+                    {
+                        Console.WriteLine("Book ID does not exist.");
+                        return;
+                    }
+
+                    // Delete the book
+                    string deleteQuery = "DELETE FROM book WHERE bookID = @BookID";//DML
+                    int rowsAffected = connection.Execute(deleteQuery, new { BookID = bookID });
+
+                    if (rowsAffected > 0)
+                    {
+                        Console.WriteLine("Book removed successfully.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("Failed to remove the book.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+        }
+
+
+        public void UpdateBook()
+        {
+            Console.WriteLine("\n==== Update Book Information ====");
+
+            try
+            {
+                Console.Write("Enter Book ID to update: ");
+                if (!int.TryParse(Console.ReadLine(), out int bookID))
+                {
+                    Console.WriteLine("Invalid input for Book ID. Please enter a number.");
+                    return;
+                }
+
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+
+                    // Fetch the book to update
+                    string fetchQuery = "SELECT * FROM book WHERE bookID = @BookID";//DQL
+                    var bookToUpdate = connection.QuerySingleOrDefault<Book>(fetchQuery, new { BookID = bookID });
+
+                    if (bookToUpdate == null)
+                    {
+                        Console.WriteLine("Book not found.");
+                        return;
+                    }
+
+                    Console.WriteLine("Leave fields empty to keep the current values.");
+
+                    Console.Write($"Current Title: {bookToUpdate.Title}. Enter New Title: ");
+                    string title = Console.ReadLine()?.Trim();
+                    if (!string.IsNullOrEmpty(title))
+                    {
+                        bookToUpdate.Title = title;
+                    }
+
+                    Console.Write($"Current Author: {bookToUpdate.Author}. Enter New Author: ");
+                    string author = Console.ReadLine()?.Trim();
+                    if (!string.IsNullOrEmpty(author))
+                    {
+                        bookToUpdate.Author = author;
+                    }
+
+                    Console.Write($"Current ISBN: {bookToUpdate.ISBN}. Enter New ISBN: ");
+                    string isbn = Console.ReadLine()?.Trim();
+                    if (!string.IsNullOrEmpty(isbn))
+                    {
+                        // Check for duplicate ISBN
+                        string isbnCheckQuery = "SELECT COUNT(1) FROM book WHERE ISBN = @ISBN AND bookID != @BookID";//ADVANCED DQL
+                        int isbnExists = connection.ExecuteScalar<int>(isbnCheckQuery, new { ISBN = isbn, BookID = bookID });
+                        if (isbnExists > 0)
+                        {
+                            Console.WriteLine($"Error: The ISBN '{isbn}' is already associated with another book. Update aborted.");
+                            return;
+                        }
+
+                        bookToUpdate.ISBN = isbn;
+                    }
+
+                    Console.Write($"Current Year of Publication: {bookToUpdate.YearOfPublication}. Enter New Year of Publication: ");
+                    string yearInput = Console.ReadLine();
+                    if (!string.IsNullOrEmpty(yearInput) && int.TryParse(yearInput, out int year))
+                    {
+                        bookToUpdate.YearOfPublication = year;
+                    }
+
+                    Console.Write($"Current Available Copies: {bookToUpdate.AvailableCopies}. Enter New Available Copies: ");
+                    string copiesInput = Console.ReadLine();
+                    if (!string.IsNullOrEmpty(copiesInput) && int.TryParse(copiesInput, out int availableCopies) && availableCopies >= 0)
+                    {
+                        bookToUpdate.AvailableCopies = availableCopies;
+                    }
+
+                    Console.Write($"Current Category ID: {bookToUpdate.CategoryID}. Enter New Category ID: ");
+                    string categoryIdInput = Console.ReadLine();
+                    if (!string.IsNullOrEmpty(categoryIdInput) && int.TryParse(categoryIdInput, out int categoryID))
+                    {
+                        string categoryCheckQuery = "SELECT COUNT(1) FROM category WHERE categoryID = @CategoryID";//ADVANCED DQL
+                        int categoryExists = connection.ExecuteScalar<int>(categoryCheckQuery, new { CategoryID = categoryID });
+                        if (categoryExists == 0)
+                        {
+                            Console.WriteLine("Category does not exist. Book update aborted.");
+                            return;
+                        }
+                        bookToUpdate.CategoryID = categoryID;
+                    }
+
+                    // Update the book in the database   (DML)
+                    string updateQuery = @"
+                UPDATE Book
+                SET 
+                    title = @Title,
+                    author = @Author,
+                    ISBN = @ISBN,
+                    yearOfPublication = @YearOfPublication,
+                    availableCopies = @AvailableCopies,
+                    categoryID = @CategoryID
+                WHERE bookID = @BookID";
+
+                    int rowsAffected = connection.Execute(updateQuery, new
+                    {
+                        bookToUpdate.Title,
+                        bookToUpdate.Author,
+                        bookToUpdate.ISBN,
+                        bookToUpdate.YearOfPublication,
+                        bookToUpdate.AvailableCopies,
+                        bookToUpdate.CategoryID,
+                        BookID = bookToUpdate.BookID
+                    });
+
+                    if (rowsAffected > 0)
+                    {
+                        Console.WriteLine("Book information updated successfully.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("Failed to update book information.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An unexpected error occurred: {ex.Message}");
+            }
+        }
+
+
+        public void RemoveMember()
+        {
+            Console.WriteLine("\n==== Remove Member ====");
+
+            try
+            {
+                Console.Write("Enter Member ID: ");
+                if (!int.TryParse(Console.ReadLine(), out int memberID))
+                {
+                    Console.WriteLine("Invalid Member ID format.");
+                    return;
+                }
+
+                // Check if the member exists in the database
+                string checkQuery = "SELECT COUNT(1) FROM member WHERE memberID = @MemberID";//ADVANCED DQL
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+
+                    int memberCount = connection.ExecuteScalar<int>(checkQuery, new { MemberID = memberID });
+
+                    if (memberCount == 0)
+                    {
+                        Console.WriteLine("Member ID does not exist.");
+                        return;
+                    }
+
+                    // If member exists, proceed to delete the member
+                    string deleteQuery = "DELETE FROM Member WHERE memberID = @MemberID";//DML
+                    connection.Execute(deleteQuery, new { MemberID = memberID });
+
+                    Console.WriteLine("Member removed successfully.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+        }
+
+
+        public void UpdateMember()
+        {
+            Console.WriteLine("\n==== Update Member ====");
+
+            try
+            {
+                Console.Write("Enter Member ID: ");
+                if (!int.TryParse(Console.ReadLine(), out int memberID))
+                {
+                    Console.WriteLine("Invalid Member ID format.");
+                    return;
+                }
+
+                // Fetch the member data from the database
+                string selectQuery = "SELECT * FROM member WHERE memberID = @MemberID";//DQL
+                Member memberToUpdate;
+
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+
+                    memberToUpdate = connection.QueryFirstOrDefault<Member>(selectQuery, new { MemberID = memberID });
+
+                    if (memberToUpdate == null)
+                    {
+                        Console.WriteLine("Member ID does not exist.");
+                        return;
+                    }
+
+                    // Ask for new values from the user
+                    Console.Write("Enter New Name (leave empty to keep current): ");
+                    string newName = Console.ReadLine().Trim();
+                    if (!string.IsNullOrEmpty(newName) && System.Text.RegularExpressions.Regex.IsMatch(newName, @"^[a-zA-Z\s]+$"))
+                    {
+                        memberToUpdate.Name = newName;
+                    }
+                    else if (!string.IsNullOrEmpty(newName))
+                    {
+                        Console.WriteLine("Error: Name must only contain alphabetic characters.");
+                        return;
+                    }
+
+                    Console.Write("Enter New Email (leave empty to keep current): ");
+                    string newEmail = Console.ReadLine().Trim();
+                    if (!string.IsNullOrEmpty(newEmail))
+                    {
+                        // Check if the new email already exists for another member
+                        string emailCheckQuery = "SELECT COUNT(1) FROM member WHERE email = @Email AND memberID != @MemberID";//ADVANCED DQL
+                        int emailExists = connection.ExecuteScalar<int>(emailCheckQuery, new { Email = newEmail, MemberID = memberID });
+
+                        if (emailExists > 0)
+                        {
+                            Console.WriteLine("Error: This email is already associated with another member.");
+                            return;
+                        }
+
+                        if (System.Text.RegularExpressions.Regex.IsMatch(newEmail, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+                        {
+                            memberToUpdate.Email = newEmail;
+                        }
+                        else
+                        {
+                            Console.WriteLine("Error: Invalid email format.");
+                            return;
+                        }
+                    }
+
+                    // Update Membership Type ID instead of Membership Type name
+                    Console.Write("Enter New Membership Type ID (leave empty to keep current): ");
+                    string newMembershipTypeInput = Console.ReadLine().Trim();
+                    if (!string.IsNullOrEmpty(newMembershipTypeInput))
+                    {
+                        if (int.TryParse(newMembershipTypeInput, out int newMembershipTypeId) &&
+                            (newMembershipTypeId == 1 || newMembershipTypeId == 2 || newMembershipTypeId == 3)) // 1: Regular, 2: Premium, 3: Student
+                        {
+                            memberToUpdate.MembershipTypeID = newMembershipTypeId;
+                        }
+                        else
+                        {
+                            Console.WriteLine("Error: Invalid Membership Type ID. Please enter 1 for Regular, 2 for Premium, or 3 for Student.");
+                            return;
+                        }
+                    }
+
+                    Console.Write("Enter New Contact Number (leave empty to keep current): ");
+                    string newContactNumber = Console.ReadLine().Trim();
+                    if (!string.IsNullOrEmpty(newContactNumber))
+                    {
+                        if (System.Text.RegularExpressions.Regex.IsMatch(newContactNumber, @"^\d+$"))
+                        {
+                            memberToUpdate.ContactNumber = newContactNumber;
+                        }
+                        else
+                        {
+                            Console.WriteLine("Error: Contact Number must only contain digits.");
+                            return;
+                        }
+                    }
+
+                    // Ensure that if the Contact Number is left empty, it is not set to NULL   (DML)
+                    string updateQuery = @"
+            UPDATE Member
+            SET name = @Name, email = @Email, membershipTypeID = @MembershipTypeID, contact = ISNULL(NULLIF(@ContactNumber, ''), contact)
+            WHERE memberID = @MemberID";
+
+                    // Execute the update, and if the Contact Number is empty, it will not overwrite the old value
+                    connection.Execute(updateQuery, new
+                    {
+                        Name = string.IsNullOrEmpty(newName) ? memberToUpdate.Name : newName,
+                        Email = string.IsNullOrEmpty(newEmail) ? memberToUpdate.Email : newEmail,
+                        MembershipTypeID = string.IsNullOrEmpty(newMembershipTypeInput) ? memberToUpdate.MembershipTypeID : int.Parse(newMembershipTypeInput),
+                        ContactNumber = newContactNumber,
+                        MemberID = memberID
+                    });
+
+                    Console.WriteLine("Member updated successfully.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+        }
+
+
+        public void ViewCategories()
+        {
+            Console.WriteLine("\n==== View All Categories ====");
+
+            try
+            {
+                // Define the SQL SELECT query to retrieve all categories from the database
+                string query = "SELECT CategoryID, CategoryName FROM Category";//DQL
+
+                // Execute the query using Dapper to fetch data
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+
+                    // Fetch all categories from the database
+                    var categories = connection.Query<Category>(query).ToList();
+
+                    // Check if categories are found
+                    if (categories.Any())
+                    {
+                        Console.WriteLine($"{"ID",-10} {"Category Name",-20}");
+                        Console.WriteLine(new string('-', 30)); // Separator line
+
+                        foreach (var category in categories)
+                        {
+                            Console.WriteLine($"{category.CategoryID,-10} {category.CategoryName,-20}");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("No categories available.");
+                    }
+                }
+            }
+            catch (SqlException ex)
+            {
+                Console.WriteLine($"SQL Error: {ex.Message}. Please check your database connection or query.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An unexpected error occurred: {ex.Message}");
+            }
+        }
+
+        public void ViewAllBooks()
+        {
+            Console.WriteLine("\n==== List of All Books ====");
+
+            try
+            {
+                //DQL(LEFT JOIN)
+                string query = @"
+            SELECT b.bookID, b.title, b.author, b.ISBN, b.availableCopies, b.categoryID, b.librarianID,
+                   c.categoryname,
+                   l.name AS LibrarianName
+            FROM Book b
+            LEFT JOIN category c ON b.categoryID = c.categoryID
+            LEFT JOIN librarian l ON b.librarianID = l.librarianID";
+
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+
+                    // Fetch all books along with their Category and Librarian data
+                    var books = connection.Query<BookViewModel>(query).ToList();
+
+                    if (books.Count == 0)
+                    {
+                        Console.WriteLine("No books available in the library.");
+                        return;
+                    }
+
+                    Console.WriteLine($"{"Book ID",-10} {"Title",-30} {"Author",-30} {"ISBN",-20} {"Available Copies",-20} {"Category",-20} {"Librarian ID",-15} {"Librarian Name",-30}");
+                    Console.WriteLine(new string('-', 150)); // Separator line
+
+                    foreach (var book in books)
+                    {
+                        Console.WriteLine($"{book.BookID,-10} {book.Title,-30} {book.Author,-30} {book.ISBN,-20} {book.AvailableCopies,-20} {book.CategoryName,-20} {book.LibrarianID,-15} {book.LibrarianName,-30}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+        }
+
+
+        public void ViewAllMembers()
+        {
+            Console.WriteLine("\n==== List of All Members ====");
+            //DQL(LEFT JOIN)
+            try
+            {
+                string query = @"
+            SELECT m.memberID, m.name, m.email, m.membershipTypeID, m.librarianID, 
+             m.contact AS ContactNumber, mt.name AS membershipType, l.name AS librarianName
+            FROM Member m
+            LEFT JOIN membershipType mt ON m.membershipTypeID = mt.membershipTypeID
+            LEFT JOIN librarian l ON m.librarianID = l.librarianID";
+
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+
+                    // Fetch all members along with their MembershipType and Librarian data
+                    var members = connection.Query<MemberViewModel>(query).ToList();
+
+                    if (members.Count == 0)
+                    {
+                        Console.WriteLine("No members registered.");
+                        return;
+                    }
+
+                    Console.WriteLine($"{"Member ID",-10} {"Name",-30} {"Email",-30} {"Membership Type",-20} {"Contact Number",-20} {"Librarian ID",-15} {"Librarian Name",-30}");
+                    Console.WriteLine(new string('-', 150)); // Separator line
+
+                    foreach (var member in members)
+                    {
+                        Console.WriteLine($"{member.MemberID,-10} {member.Name,-30} {member.Email,-30} {member.MembershipType,-20} {member.ContactNumber,-20} {member.LibrarianID,-15} {member.LibrarianName,-30}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+        }
+
+
+        public void ViewBorrowTransactions()
+        {
+            Console.WriteLine("\n==== Borrow Transactions ====");
+
+            try
+            {
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    var borrowDetails = connection.Query<dynamic>(
+                        "ViewBorrowTransactionsProcedure",//PROCEDURES
+                        commandType: CommandType.StoredProcedure
+                    ).ToList();
+
+                    if (!borrowDetails.Any())
+                    {
+                        Console.WriteLine("No borrow transactions found.");
+                        return;
+                    }
+
+                    foreach (var detail in borrowDetails)
+                    {
+                        Console.WriteLine($"Transaction ID: {detail.borrowTransactionID}");
+                        Console.WriteLine($"Member ID: {detail.memberID}, Name: {detail.MemberName}");
+                        Console.WriteLine($"Book ID: {detail.bookID}, Title: {detail.BookTitle}");
+                        Console.WriteLine($"Borrowed On: {Convert.ToDateTime(detail.dateBorrowed).ToShortDateString()}");
+                        Console.WriteLine($"Due Date: {Convert.ToDateTime(detail.dueDate).ToShortDateString()}");
+
+                        // Check if returnDate is null and display "Not Returned"
+                        string returnDate = detail.returnDate != null
+                            ? Convert.ToDateTime(detail.returnDate).ToShortDateString()
+                            : "Not Returned";
+
+                        Console.WriteLine($"Return Date: {returnDate}");
+                        Console.WriteLine();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+        }
+
+
+
+        public void ViewReturnDetails()
+        {
+            Console.WriteLine("\n==== Return Details ====");
+
+            try
+            {
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    var returnDetails = connection.Query<dynamic>(
+                        "ViewReturnDetailsProcedure",//PROCEDURES
+                        commandType: CommandType.StoredProcedure
+                    ).ToList();
+
+                    if (!returnDetails.Any())
+                    {
+                        Console.WriteLine("No returned books found.");
+                        return;
+                    }
+
+                    foreach (var detail in returnDetails)
+                    {
+                        Console.WriteLine($"Transaction ID: {detail.borrowTransactionID}");
+                        Console.WriteLine($"Member ID: {detail.memberID}, Name: {detail.MemberName}");
+                        Console.WriteLine($"Book ID: {detail.bookID}, Title: {detail.BookTitle}");
+                        Console.WriteLine($"Borrowed On: {Convert.ToDateTime(detail.dateBorrowed).ToShortDateString()}");
+                        Console.WriteLine($"Due Date: {Convert.ToDateTime(detail.dueDate).ToShortDateString()}");
+                        Console.WriteLine($"Returned On: {Convert.ToDateTime(detail.returnDate).ToShortDateString()}");
+                        Console.WriteLine();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+        }
+
+
+        public void ViewMembershipTypes()
+        {
+            Console.WriteLine("\n==== Membership Types ====");
+
+            try
+            {
+                // SQL query to fetch all membership types from the database
+                string query = "SELECT membershipTypeID, name, charges, allowedReturnDays FROM membershipType";//DQL
+
+                
+
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+
+                    // Execute the query and get the list of MembershipType objects
+                    var membershipTypes = connection.Query<MembershipType>(query).ToList();
+
+
+                    if (membershipTypes.Count == 0)
+                    {
+                        Console.WriteLine("No membership types available.");
+                        return;
+                    }
+
+                    // Display column headers
+                    Console.WriteLine($"{"ID",-5} {"Type Name",-15} {"Charges",-10} {"Allowed Return Days",-20}");
+                    Console.WriteLine(new string('-', 50)); // Separator line
+
+                    foreach (var membershipType in membershipTypes)
+                    {
+                        // Display each membership type in the correct format
+                        Console.WriteLine($"{membershipType.MembershipTypeID,-5} {membershipType.name,-15} {membershipType.Charges,-10:C} {membershipType.AllowedReturnDays,-20}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+        }
+        public void ImposeFine()
+        {
+            Console.WriteLine("\n==== Impose Fine ====");
+
+            try
+            {
+                Console.Write("Enter Transaction ID: ");
+                if (!int.TryParse(Console.ReadLine(), out int transactionId))
+                {
+                    throw new FormatException("Invalid Transaction ID format. Please enter a valid number.");
+                }
+
+                using (var connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+
+                    // Check if the book is returned (i.e., returnDate is not NULL)
+                    string checkReturnQuery = @"
+                SELECT returnDate FROM borrowTransaction
+                WHERE borrowTransactionID = @TransactionID";//DQL
+
+                    var returnDate = connection.QueryFirstOrDefault<DateTime?>(checkReturnQuery, new { TransactionID = transactionId });
+
+                    if (returnDate.HasValue) // If returnDate is not NULL (book returned)
+                    {
+                        // Book is already returned, so we just show the return date and fine details if applicable.
+                        DateTime returnDateNow = DateTime.Now; // Set current date for return
+
+                        // Update the returnDate in borrowTransaction table to the current date if not set
+                        string updateReturnDateQuery = @"
+                    UPDATE borrowTransaction
+                    SET returnDate = @ReturnDate
+                    WHERE borrowTransactionID = @TransactionID AND returnDate IS NULL";//DML
+
+                        int rowsAffected = connection.Execute(updateReturnDateQuery, new { ReturnDate = returnDateNow, TransactionID = transactionId });
+
+                        if (rowsAffected == 0)
+                        {
+                            Console.WriteLine("Transaction ID not found or book already returned.");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"Book successfully returned on {returnDateNow}.");
+                        }
+
+                        // Retrieve fine details (if any) and payment status
+                        string fineQueryReturned = @"
+                    SELECT fineAmount, paymentStatus 
+                    FROM fine 
+                    WHERE borrowTransactionID = @TransactionID";
+
+                        var fineDetailsReturned = connection.QueryFirstOrDefault(fineQueryReturned, new { TransactionID = transactionId });
+
+                        if (fineDetailsReturned != null)
+                        {
+                            // Display fine details
+                            Console.WriteLine("\n==== Fine Details ====");
+                            Console.WriteLine($"Fine Amount: Rs. {fineDetailsReturned.fineAmount}");
+                            Console.WriteLine($"Payment Status: Paid");
+                        }
+                        else
+                        {
+                            Console.WriteLine("\nNo fine applicable for this transaction.");
+                        }
+                    }
+                    else // If returnDate is NULL, book is not returned yet
+                    {
+                        // Show the fine details even if the book is not returned
+                        string fineQuery = @"
+                    SELECT fineAmount, paymentStatus 
+                    FROM fine 
+                    WHERE borrowTransactionID = @TransactionID";//DQL
+
+                        var fineDetails = connection.QueryFirstOrDefault(fineQuery, new { TransactionID = transactionId });
+
+                        if (fineDetails != null)
+                        {
+                            Console.WriteLine("\n==== Fine Details (Unpaid) ====");
+                            Console.WriteLine($"Fine Amount: Rs. {fineDetails.fineAmount}");
+                            Console.WriteLine($"Payment Status: Unpaid");
+                        }
+                        else
+                        {
+                            Console.WriteLine("\nNo fine details found for this transaction.");
+                        }
+                    }
+                }
+            }
+            catch (FormatException ex)
+            {
+                Console.WriteLine($"Input Error: {ex.Message}");
+            }
+            catch (SqlException ex)
+            {
+                Console.WriteLine($"Database Error: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Unexpected Error: {ex.Message}");
+            }
+        }
+
+    }
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            LibraryManagementSystem library = new LibraryManagementSystem();
+
+            // Librarian Login
+            bool loggedIn = false;
+            while (!loggedIn)
+            {
+                loggedIn = library.LibrarianLogin();
+            }
+
+            bool exit = false;
+            while (!exit)
+            {
+                library.DisplayMenu();
+                Console.Write("\nChoose an option: ");
+                string option = Console.ReadLine();
+
+                switch (option)
+                {
+                    case "1":
+                        library.AddCategory();
+                        break;
+                    case "2":
+                        library.AddBook();
+                        break;
+                    case "3":
+                        library.AddMember();
+                        break;
+                    case "4":
+                        library.BorrowBook();
+                        break;
+                    case "5":
+                        library.ReturnBook();
+                        break;
+                    case "6":
+                        library.RemoveBook();
+                        break;
+                    case "7":
+                        library.UpdateBook();
+                        break;
+                    case "8":
+                        library.RemoveMember();
+                        break;
+                    case "9":
+                        library.UpdateMember();
+                        break;
+                    case "10":
+                        library.ViewAllBooks();
+                        break;
+                    case "11":
+                        library.ViewAllMembers();
+                        break;
+                    case "12":
+                        library.ViewBorrowTransactions();
+                        break;
+                    case "13":
+                        library.ViewReturnDetails();
+                        break;
+                    case "14":
+                        library.ViewCategories();
+                        break;
+                    case "15":
+                        library.ViewMembershipTypes();
+                        break;
+                    case "16":
+                        library.ImposeFine();
+                        break;
+                    case "17":
+                        exit = true;
+                        Console.WriteLine("Exiting the system...");
+                        break;
+                    default:
+                        Console.WriteLine("Invalid option. Please try again.");
+                        break;
+                }
+                Console.ReadLine();
+
+            }
+        }
+    }
+}
+   

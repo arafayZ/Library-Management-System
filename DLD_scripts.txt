@@ -1,0 +1,78 @@
+CREATE DATABASE LibraryDB;
+
+CREATE TABLE librarian (
+    librarianID INT IDENTITY(1,1),
+    username VARCHAR(255) NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    name VARCHAR(255) DEFAULT 'Unknown',
+    contact INT,
+    PRIMARY KEY (librarianID)
+);
+
+CREATE TABLE category (
+    categoryID INT IDENTITY(1,1),
+    categoryname VARCHAR(50) NOT NULL UNIQUE,
+    PRIMARY KEY (categoryID)
+);
+
+CREATE TABLE membershiptype (
+    membershipTypeID INT IDENTITY(1,1),
+    name VARCHAR(255) NOT NULL,
+    charges DECIMAL(18,0) NOT NULL,
+    allowedReturnDays INT NOT NULL,
+    PRIMARY KEY (membershipTypeID)
+);
+
+CREATE TABLE book (
+    bookID INT IDENTITY(1,1),
+    title VARCHAR(255) NOT NULL,
+    author VARCHAR(255) NOT NULL,
+    ISBN INT NOT NULL UNIQUE,
+    yearOfPublication INT NOT NULL,
+    availableCopies INT DEFAULT 0 CHECK (availableCopies >= 0),
+    categoryID INT NOT NULL,
+    librarianID INT NOT NULL,
+    PRIMARY KEY (bookID),
+    FOREIGN KEY (categoryID) REFERENCES category (categoryID),
+    FOREIGN KEY (librarianID) REFERENCES librarian (librarianID)
+);
+
+CREATE TABLE member (
+    memberID INT IDENTITY(1,1),
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(30) UNIQUE NOT NULL,
+    contact INT NOT NULL,
+    membershipTypeID INT NOT NULL,
+    librarianID INT NOT NULL,
+    PRIMARY KEY (memberID),
+    FOREIGN KEY (membershipTypeID) REFERENCES membershiptype (membershipTypeID),
+    FOREIGN KEY (librarianID) REFERENCES librarian (librarianID)
+);
+
+CREATE TABLE borrowtransaction (
+    borrowTransactionID INT IDENTITY(1,1),
+    dateBorrowed DATETIME NOT NULL,
+    dueDate DATETIME NOT NULL,
+    returnDate DATETIME,
+    bookID INT NOT NULL,
+    memberID INT NOT NULL,
+    PRIMARY KEY (borrowTransactionID),
+    FOREIGN KEY (bookID) REFERENCES book (bookID),
+    FOREIGN KEY (memberID) REFERENCES member (memberID)
+);
+
+CREATE TABLE fine (
+    fineID INT IDENTITY(1,1),
+    fineAmount DECIMAL(18,0) NOT NULL CHECK (fineAmount >= 0),
+    paymentStatus VARCHAR(255) NOT NULL,
+    borrowTransactionID INT NOT NULL,
+    PRIMARY KEY (fineID),
+    UNIQUE (borrowTransactionID),
+    FOREIGN KEY (borrowTransactionID) REFERENCES borrowtransaction (borrowTransactionID)
+);
+
+
+
+
+
+

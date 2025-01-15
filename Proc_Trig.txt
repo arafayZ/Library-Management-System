@@ -1,0 +1,210 @@
+=======================================================PROCEDURE===========================================================
+CREATE PROCEDURE BorrowBookProcedure
+    @MemberID INT,
+    @BookID INT,
+    @DateBorrowed DATETIME
+AS
+BEGIN
+    -- Declare variables
+    DECLARE @AvailableCopies INT;
+    DECLARE @AllowedReturnDays INT;
+    DECLARE @DueDate DATETIME;
+
+    -- Get available copies of the book
+    SELECT @AvailableCopies = availableCopies FROM book WHERE bookID = @BookID;
+
+    -- Check if there are available copies
+    IF @AvailableCopies > 0
+    BEGIN
+        -- Get the membership type's allowed return days
+        SELECT @AllowedReturnDays = mt.allowedReturnDays
+        FROM member m
+        INNER JOIN membershiptype mt ON m.membershipTypeID = mt.membershipTypeID
+        WHERE m.memberID = @MemberID;
+
+        -- Calculate the due date based on the allowed return days for the member
+        SET @DueDate = DATEADD(DAY, @AllowedReturnDays, @DateBorrowed);
+
+        -- Insert the new borrow transaction
+        INSERT INTO borrowtransaction (memberID, bookID, dateBorrowed, dueDate)
+        VALUES (@MemberID, @BookID, @DateBorrowed, @DueDate);
+
+        -- Update the available copies of the book
+        UPDATE book
+        SET availableCopies = availableCopies - 1
+        WHERE bookID = @BookID;
+
+        PRINT 'Book borrowed successfully. Due date: ' + CAST(@DueDate AS VARCHAR);
+    END
+    ELSE
+    BEGIN
+        PRINT 'No copies of this book are currently available';
+    END
+END
+
+
+
+
+
+
+
+
+CREATE PROCEDURE ReturnBookProcedure
+    @TransactionID INT
+AS
+BEGIN
+    -- Check if the transaction ID exists
+    IF NOT EXISTS (SELECT 1 FROM borrowtransaction WHERE borrowTransactionID = @TransactionID)
+    BEGIN
+        RAISERROR('Transaction ID does not exist.', 16, 1);
+        RETURN;
+    END
+
+    -- Check if the book has already been returned (i.e., returnDate is not NULL)
+    IF EXISTS (SELECT 1 FROM borrowtransaction WHERE borrowTransactionID = @TransactionID AND returnDate IS NOT NULL)
+    BEGIN
+        RAISERROR('This book has already been returned.', 16, 1);
+        RETURN;
+    END
+
+    -- Update the return date in the borrowtransaction table
+    UPDATE borrowtransaction
+    SET returnDate = GETDATE() -- Automatically set to the current date
+    WHERE borrowTransactionID = @TransactionID;
+
+    -- Update the available copies in the book table
+    DECLARE @BookID INT;
+    SELECT @BookID = bookID FROM borrowtransaction WHERE borrowTransactionID = @TransactionID;
+    UPDATE book
+    SET availableCopies = availableCopies + 1
+    WHERE bookID = @BookID;
+
+END
+
+
+
+
+
+
+
+
+CREATE PROCEDURE ViewBorrowTransactionsProcedure
+AS
+BEGIN
+    SELECT 
+        bt.borrowTransactionID,
+        bt.dateBorrowed,
+        bt.dueDate,
+        bt.returnDate,
+        m.memberID,
+        m.name AS MemberName,
+        b.bookID,
+        b.title AS BookTitle
+    FROM 
+        borrowtransaction bt
+    INNER JOIN 
+        member m ON bt.memberID = m.memberID
+    INNER JOIN 
+        book b ON bt.bookID = b.bookID;
+END;
+GO
+
+
+
+
+
+
+
+
+
+
+CREATE PROCEDURE ViewReturnDetailsProcedure
+AS
+BEGIN
+    SELECT bt.borrowTransactionID, 
+           bt.dateBorrowed, 
+           bt.dueDate, 
+           bt.returnDate, 
+           m.memberID, 
+           m.name AS MemberName, 
+           b.bookID, 
+           b.title AS BookTitle
+    FROM borrowtransaction bt
+    INNER JOIN member m ON bt.memberID = m.memberID
+    INNER JOIN book b ON bt.bookID = b.bookID
+    WHERE bt.returnDate IS NOT NULL; -- Fetch only returned books
+END;
+GO
+
+
+
+
+====================================================TRigger====================================
+ALTER TRIGGER [dbo].[trg_ImposeFine]
+ON [dbo].[borrowtransaction]
+AFTER UPDATE
+AS
+BEGIN
+    -- Check if the returnDate is updated
+    IF UPDATE(returnDate)
+    BEGIN
+        DECLARE @TransactionID INT,
+                @MemberID INT,
+                @DueDate DATETIME,
+                @ReturnDate DATETIME,
+                @OverdueDays INT,
+                @OverdueCharges DECIMAL(18, 2),
+                @TotalFine DECIMAL(18, 2);
+
+        -- Get the necessary data from the updated row
+        SELECT @TransactionID = borrowTransactionID, 
+               @MemberID = memberID, 
+               @DueDate = dueDate, 
+               @ReturnDate = returnDate 
+        FROM inserted;
+
+        -- If the book is returned 
+        IF @ReturnDate IS NOT NULL
+        BEGIN
+            -- Check if the book is returned late (returnDate > dueDate)
+            IF @ReturnDate > @DueDate
+            BEGIN
+                -- Calculate the overdue days
+                SET @OverdueDays = DATEDIFF(DAY, @DueDate, @ReturnDate);
+                
+                -- Overdue charge is 100 Rs per day
+                SET @OverdueCharges = @OverdueDays * 100;
+
+                -- Total fine is just the overdue charges (no membership type charge)
+                SET @TotalFine = @OverdueCharges;
+
+                -- Insert or update the fine record in the fine table
+                IF EXISTS (SELECT 1 FROM fine WHERE borrowTransactionID = @TransactionID)
+                BEGIN
+                    -- Update the fine if it already exists and mark payment as 'Unpaid'
+                    UPDATE fine
+                    SET fineAmount = @TotalFine, paymentStatus = 'Unpaid'
+                    WHERE borrowTransactionID = @TransactionID;
+                END
+                ELSE
+                BEGIN
+                    -- Insert a new fine record if not found
+                    INSERT INTO fine (borrowTransactionID, fineAmount, paymentStatus)
+                    VALUES (@TransactionID, @TotalFine, 'Unpaid');
+                END
+            END
+            ELSE
+            BEGIN
+                -- If the book is returned on time, there is no fine
+                UPDATE fine
+                SET fineAmount = 0, paymentStatus = 'Paid'
+                WHERE borrowTransactionID = @TransactionID;
+            END
+
+            -- Update the payment status to 'Paid' once the book is returned (either late or on time)
+            UPDATE fine
+            SET paymentStatus = 'Paid'
+            WHERE borrowTransactionID = @TransactionID;
+        END
+    END
+END;

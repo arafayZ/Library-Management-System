@@ -1,0 +1,1040 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace librarymangementsystem
+{
+    public class Book
+    {
+        public int BookID { get; set; }
+        public string Title { get; set; }
+        public string Author { get; set; }
+        public string ISBN { get; set; }
+        public int YearOfPublication { get; set; }
+        public int AvailableCopies { get; set; }
+        public int CategoryID { get; set; }
+        public int LibrarianID { get; set; }  // Foreign key to Librarian
+    }
+
+    public class MembershipType
+    {
+        public int MembershipTypeID { get; set; }
+        public string TypeName { get; set; }
+        public decimal Charges { get; set; }
+        public int AllowedReturnDays { get; set; }
+    }
+
+    public class Member
+    {
+        public int MemberID { get; set; }
+        public string Name { get; set; }
+        public string Email { get; set; }
+        public int MembershipTypeID { get; set; } // Foreign key
+        public int LibrarianID { get; set; }  // Foreign key to Librarian
+        public string ContactNumber { get; set; }
+    }
+
+   
+
+    public class Librarian
+    {
+        public int LibrarianID { get; set; }
+        public string Username { get; set; }
+        public string Password { get; set; }
+        public string Name { get; set; }
+        public string ContactInfo { get; set; }
+    }
+
+    public class BorrowTransaction
+    {
+        public int TransactionID { get; set; }
+        public int MemberID { get; set; } // Foreign key to Member
+        public int BookID { get; set; } // Foreign key to Book
+        public DateTime DateBorrowed { get; set; }
+        public DateTime DueDate { get; set; }
+        public DateTime? ReturnDate { get; set; } // Nullable, can be null until book is returned
+    }
+
+    public class Fine
+    {
+        public int FineID { get; set; }
+        public int TransactionID { get; set; } // Foreign key to BorrowTransaction
+        public decimal FineAmount { get; set; }
+        public bool PaymentStatus { get; set; } // True if paid, False if not paid
+    }
+
+    public class Category
+    {
+        public int CategoryID { get; set; }
+        public string CategoryName { get; set; }
+    }
+
+
+
+    public class LibraryManagementSystem
+    {
+        public List<Book> Books = new List<Book>();
+        public List<Member> Members = new List<Member>();
+        public List<Librarian> Librarians = new List<Librarian>();
+        public List<BorrowTransaction> BorrowTransactions = new List<BorrowTransaction>();
+        public List<Fine> Fines = new List<Fine>();
+        public List<Category> Categories = new List<Category>();
+        private Librarian currentLibrarian;
+        public List<MembershipType> MembershipTypes { get; set; } = new List<MembershipType>
+    {
+        new MembershipType { MembershipTypeID = 1, TypeName = "Regular", Charges = 100, AllowedReturnDays = 10 },
+        new MembershipType { MembershipTypeID = 2, TypeName = "Premium", Charges = 200, AllowedReturnDays = 25 },
+        new MembershipType { MembershipTypeID = 3, TypeName = "Student", Charges = 50, AllowedReturnDays = 15 }
+    };
+
+        private int transactionCounter = 1; // For automatic transaction IDs
+        private int memberCounter = 1; // For automatic member IDs
+        private int booksCounter = 1; // For automatic member IDs
+        private int fineCounter = 1; // For automatic fine IDs
+        private int categoryCounter = 1; // For automatic category IDs
+
+
+
+
+
+        public LibraryManagementSystem()
+        {
+            // Adding a default librarian (username: "admin", password: "admin123")
+
+            Librarians.Add(new Librarian
+            {
+                LibrarianID = 1,
+                Username = "emaz",
+                Password = "123",
+                Name = "EMAZ ALI KHAN",
+                ContactInfo = "emaz@example.com"
+            });
+
+            Librarians.Add(new Librarian
+            {
+                LibrarianID = 2,
+                Username = "rafay",
+                Password = "123",
+                Name = "ABDUL RAFAY ZAHID",
+                ContactInfo = "rafay@example.com"
+            });
+        }
+
+
+        public bool LibrarianLogin()
+        {
+            Console.WriteLine("==== Librarian Login ====");
+            Console.Write("Enter Username: ");
+            string username = Console.ReadLine().Trim();
+            Console.Write("Enter Password: ");
+            string password = Console.ReadLine().Trim();
+
+            // Find the librarian based on username and password
+            Librarian librarian = Librarians.Find(l =>
+                l.Username.Equals(username, StringComparison.OrdinalIgnoreCase) &&
+                l.Password.Equals(password));
+
+            if (librarian != null)
+            {
+                currentLibrarian = librarian; // Set the current librarian
+                Console.WriteLine($"Welcome, {librarian.Name}!");
+                return true;
+            }
+            else
+            {
+                Console.WriteLine("Invalid login. Try again.");
+                return false;
+            }
+        }
+
+        public void DisplayMenu()
+        {
+            Console.WriteLine("\n==== Library Management System ====");
+            Console.WriteLine("1.  Add Category");
+            Console.WriteLine("2.  Add a Book");
+            Console.WriteLine("3.  Add a Member");
+            Console.WriteLine("4.  Borrow a Book");
+            Console.WriteLine("5.  Return a Book");
+            Console.WriteLine("6.  Remove a Book");
+            Console.WriteLine("7.  Update a Book");
+            Console.WriteLine("8.  Remove a Member");
+            Console.WriteLine("9.  Update a Member");
+            Console.WriteLine("10. View All Books");
+            Console.WriteLine("11. View All Members");
+            Console.WriteLine("12. View Borrow Transactions");
+            Console.WriteLine("13. View Return Details");
+            Console.WriteLine("14. View All Categories Details");
+            Console.WriteLine("15. View Membership-Type");
+            Console.WriteLine("16. Fine");
+            Console.WriteLine("17. Exit");
+
+
+            Console.Write("=====Select an option (1-17)===== ");
+        }
+
+        public void Run()
+        {
+            bool isLoggedIn = false;
+
+            // Attempt login until successful
+            while (!isLoggedIn)
+            {
+                isLoggedIn = LibrarianLogin();
+            }
+
+            int choice = 0;
+            do
+            {
+                DisplayMenu();
+                bool isValidInput = int.TryParse(Console.ReadLine(), out choice);
+
+                if (isValidInput)
+                {
+                    switch (choice)
+                    {
+                        case 1:
+                            AddCategory();
+                            break;
+                        case 2:
+                            AddBook();
+                            break;
+                        case 3:
+                            AddMember();
+                            break;
+                        case 4:
+                            BorrowBook();
+                            break;
+                        case 5:
+                            ReturnBook();
+                            break;
+                        case 6:
+                            AddCategory();
+                            break;
+                        case 7:
+                            AddCategory();
+                            break;
+                        case 8:
+                            AddCategory();
+                            break;
+                        case 9:
+                            AddCategory();
+                            break;
+                        case 10:
+                            ViewAllBooks();
+                            break;
+                        case 11:
+                            ViewAllMembers();
+                            break;
+                        case 12:
+                            ViewBorrowTransactions();
+                            break;
+                        case 13:
+                            ViewReturnDetails();
+                            break;
+                        case 14:
+                            ViewCategories();
+                            break;
+                        case 15:
+                            ViewMembershipTypes();
+                            break;
+                        case 16:
+                            ImposeFine();
+                            break;
+                        case 17:
+                            Console.WriteLine("Exiting the system...");
+                            break;
+                        default:
+                            Console.WriteLine("Invalid choice. Try again.");
+                            break;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Please enter a valid number.");
+                }
+
+            } while (choice != 16);
+        }
+
+        // Methods
+
+        public void AddCategory()
+        {
+            Console.Write("Enter Category Name: ");
+
+            string categoryName = Console.ReadLine();
+
+            if (string.IsNullOrEmpty(categoryName))
+            {
+                Console.WriteLine("Category name cannot be empty. Please enter a valid category name.");
+                return;
+            }
+
+            Categories.Add(new Category
+            {
+                CategoryID = categoryCounter++,
+                CategoryName = categoryName
+            });
+
+            Console.WriteLine($"Category '{categoryName}' added successfully.");
+
+        }
+
+
+        public void AddBook()
+        {
+            Console.WriteLine("\n==== Add a New Book ====");
+
+            try
+            {
+                Console.Write("Enter Title: ");
+                string title = Console.ReadLine().Trim();
+                if (string.IsNullOrEmpty(title))
+                {
+                    throw new ArgumentException("Title cannot be empty.");
+                }
+
+                Console.Write("Enter Author: ");
+                string author = Console.ReadLine().Trim();
+                if (string.IsNullOrEmpty(author))
+                {
+                    throw new ArgumentException("Author cannot be empty.");
+                }
+
+                Console.Write("Enter ISBN: ");
+                string isbn = Console.ReadLine().Trim();
+                if (string.IsNullOrEmpty(isbn))
+                {
+                    throw new ArgumentException("ISBN cannot be empty.");
+                }
+
+                Console.Write("Enter Available Copies: ");
+                int availableCopies = int.Parse(Console.ReadLine().Trim());
+
+                Console.Write("Enter Category ID: ");
+                int categoryId = int.Parse(Console.ReadLine().Trim());
+
+                Book newBook = new Book
+                {
+                    BookID = booksCounter++, // Assuming you have a counter for IDs
+                    Title = title,
+                    Author = author,
+                    ISBN = isbn,
+                    AvailableCopies = availableCopies,
+                    CategoryID = categoryId,
+                    LibrarianID = currentLibrarian != null ? currentLibrarian.LibrarianID : 0 // Set the Librarian ID, or 0 if not logged in
+                };
+
+                Books.Add(newBook);
+                Console.WriteLine("Book added successfully.");
+            }
+            catch (ArgumentException ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+            catch (FormatException)
+            {
+                Console.WriteLine("Error: Invalid input format. Please enter a valid number.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An unexpected error occurred: {ex.Message}");
+            }
+        }
+
+
+        public void AddMember()
+        {
+            Console.WriteLine("\n==== Add a New Member ====");
+
+            try
+            {
+                Console.Write("Enter Name: ");
+                string name = Console.ReadLine().Trim();
+                if (string.IsNullOrEmpty(name))
+                {
+                    throw new ArgumentException("Name cannot be empty.");
+                }
+
+                Console.Write("Enter Email: ");
+                string email = Console.ReadLine().Trim();
+                if (string.IsNullOrEmpty(email))
+                {
+                    throw new ArgumentException("Email cannot be empty.");
+                }
+
+                Console.Write("Enter Contact Number: ");
+                string contactNumber = Console.ReadLine().Trim();
+                if (string.IsNullOrEmpty(contactNumber))
+                {
+                    throw new ArgumentException("Contact Number cannot be empty.");
+                }
+
+                Console.Write("Enter Membership Type ID (1 for Regular, 2 for Premium, 3 for Student): ");
+                int membershipTypeId = int.Parse(Console.ReadLine().Trim());
+                if (membershipTypeId < 1 || membershipTypeId > 3)
+                {
+                    throw new ArgumentException("Invalid Membership Type ID.");
+                }
+
+                Member newMember = new Member
+                {
+                    MemberID = memberCounter++, // Assuming you have a counter for IDs
+                    Name = name,
+                    Email = email,
+                    ContactNumber = contactNumber,
+                    MembershipTypeID = membershipTypeId,
+                    LibrarianID = currentLibrarian != null ? currentLibrarian.LibrarianID : 0 // Set the Librarian ID, or 0 if not logged in
+                };
+
+                Members.Add(newMember);
+                Console.WriteLine("Member added successfully.");
+            }
+            catch (ArgumentException ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+            catch (FormatException)
+            {
+                Console.WriteLine("Error: Invalid input format. Please enter a valid number.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An unexpected error occurred: {ex.Message}");
+            }
+        }
+
+
+
+        public void BorrowBook()
+        {
+            Console.WriteLine("\n==== Borrow a Book ====");
+            try
+            {
+                Console.Write("Enter Member ID: ");
+                if (!int.TryParse(Console.ReadLine(), out int memberID))
+                {
+                    throw new FormatException("Invalid input for Member ID. Please enter a number.");
+                }
+
+                Member member = Members.Find(m => m.MemberID == memberID);
+                if (member == null)
+                {
+                    throw new ArgumentException("You are not a registered member. Please become a member first.");
+                }
+
+                Console.Write("Enter Book ID: ");
+                if (!int.TryParse(Console.ReadLine(), out int bookID))
+                {
+                    throw new FormatException("Invalid input for Book ID. Please enter a number.");
+                }
+
+                Book book = Books.Find(b => b.BookID == bookID);
+                if (book == null)
+                {
+                    throw new ArgumentException("Book not found. Please enter a valid Book ID.");
+                }
+
+                if (book.AvailableCopies <= 0)
+                {
+                    throw new ArgumentException("No copies of this book are currently available.");
+                }
+
+                BorrowTransaction transaction = new BorrowTransaction
+                {
+                    TransactionID = transactionCounter++,
+                    MemberID = memberID,
+                    BookID = bookID,
+                    DateBorrowed = DateTime.Now,
+                    DueDate = DateTime.Now.AddDays(14) // Due in 2 weeks
+                };
+
+                BorrowTransactions.Add(transaction);
+                book.AvailableCopies--;
+                Console.WriteLine("Book borrowed successfully.");
+            }
+            catch (ArgumentException ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+            catch (FormatException ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An unexpected error occurred: {ex.Message}");
+            }
+
+        }
+
+
+
+
+        public void ReturnBook()
+        {
+            Console.WriteLine("\n==== Return Book ====");
+
+            try
+            {
+                Console.Write("Enter Transaction ID: ");
+                if (!int.TryParse(Console.ReadLine(), out int transactionID) || !BorrowTransactions.Exists(t => t.TransactionID == transactionID))
+                {
+                    throw new ArgumentException("Transaction ID does not exist.");
+
+                }
+
+                BorrowTransaction transaction = BorrowTransactions.Find(t => t.TransactionID == transactionID);
+
+                // Check if the book has already been returned
+                if (transaction != null && transaction.ReturnDate == null)
+                {
+                    transaction.ReturnDate = DateTime.Now;
+                    Book book = Books.Find(b => b.BookID == transaction.BookID);
+                    if (book != null)
+                    {
+                        book.AvailableCopies++;
+                    }
+                    Console.WriteLine("Book returned successfully.");
+                }
+
+                // Set the return date to now
+                transaction.ReturnDate = DateTime.Now;
+                Console.WriteLine($"Book returned successfully. Transaction ID: {transactionID}");
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}. Please try again.");
+            }
+        }
+        public void RemoveBook()
+        {
+            Console.WriteLine("\n==== Remove Book ====");
+
+            try
+            {
+                Console.Write("Enter Book ID: ");
+                if (!int.TryParse(Console.ReadLine(), out int bookID) || !Books.Exists(b => b.BookID == bookID))
+                {
+                    throw new ArgumentException("Book ID does not exist.");
+                }
+
+                Books.RemoveAll(b => b.BookID == bookID);
+                Console.WriteLine("Book removed successfully.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+
+        }
+
+
+        public void UpdateBook()
+        {
+            Console.WriteLine("\n==== Update Book Information ====");
+
+            try
+            {
+                Console.Write("Enter Book ID to update: ");
+                if (!int.TryParse(Console.ReadLine(), out int bookID))
+                {
+                    throw new FormatException("Invalid input for Book ID. Please enter a number.");
+                }
+
+                Book book = Books.Find(b => b.BookID == bookID);
+                if (book == null)
+                {
+                    throw new ArgumentException("Book not found.");
+                }
+
+                Console.Write("Enter New Title (leave empty to keep current): ");
+                string title = Console.ReadLine()?.Trim();
+                if (!string.IsNullOrEmpty(title))
+                {
+                    book.Title = title;
+                }
+
+                Console.Write("Enter New Author (leave empty to keep current): ");
+                string author = Console.ReadLine()?.Trim();
+                if (!string.IsNullOrEmpty(author))
+                {
+                    book.Author = author;
+                }
+
+                Console.Write("Enter New ISBN (leave empty to keep current): ");
+                string isbn = Console.ReadLine()?.Trim();
+                if (!string.IsNullOrEmpty(isbn))
+                {
+                    book.ISBN = isbn;
+                }
+
+                Console.Write("Enter New Year of Publication (leave empty to keep current): ");
+                string yearInput = Console.ReadLine();
+                if (!string.IsNullOrEmpty(yearInput) && int.TryParse(yearInput, out int year))
+                {
+                    book.YearOfPublication = year;
+                }
+
+                Console.Write("Enter New Available Copies (leave empty to keep current): ");
+                string copiesInput = Console.ReadLine();
+                if (!string.IsNullOrEmpty(copiesInput) && int.TryParse(copiesInput, out int copies) && copies >= 0)
+                {
+                    book.AvailableCopies = copies;
+                }
+
+                Console.Write("Enter New Category ID (leave empty to keep current): ");
+                string categoryIdInput = Console.ReadLine();
+                if (!string.IsNullOrEmpty(categoryIdInput) && int.TryParse(categoryIdInput, out int categoryID))
+                {
+                    Category category = Categories.Find(c => c.CategoryID == categoryID);
+                    if (category == null)
+                    {
+                        throw new ArgumentException("Category does not exist.");
+                    }
+                    book.CategoryID = categoryID;
+                }
+
+                Console.WriteLine("Book information updated successfully.");
+            }
+            catch (ArgumentException ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+            catch (FormatException ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An unexpected error occurred: {ex.Message}");
+            }
+
+        }
+
+        public void RemoveMember()
+        {
+            Console.WriteLine("\n==== Remove Member ====");
+
+            try
+            {
+                Console.Write("Enter Member ID: ");
+                if (!int.TryParse(Console.ReadLine(), out int memberID) || !Members.Exists(m => m.MemberID == memberID))
+                {
+                    throw new ArgumentException("Member ID does not exist.");
+                }
+
+                Members.RemoveAll(m => m.MemberID == memberID);
+                Console.WriteLine("Member removed successfully.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+
+        }
+
+
+        public void UpdateMember()
+        {
+            Console.WriteLine("\n==== Update Member ====");
+
+            try
+            {
+                Console.Write("Enter Member ID: ");
+                if (!int.TryParse(Console.ReadLine(), out int memberID) || !Members.Exists(m => m.MemberID == memberID))
+                {
+                    throw new ArgumentException("Member ID does not exist.");
+                }
+
+                Member memberToUpdate = Members.Find(m => m.MemberID == memberID);
+
+                Console.Write("Enter New Name (leave empty to keep current): ");
+                string newName = Console.ReadLine().Trim();
+                if (!string.IsNullOrEmpty(newName))
+                {
+                    memberToUpdate.Name = newName;
+                }
+
+                Console.Write("Enter New Email (leave empty to keep current): ");
+                string newEmail = Console.ReadLine().Trim();
+                if (!string.IsNullOrEmpty(newEmail))
+                {
+                    memberToUpdate.Email = newEmail;
+                }
+
+                // Update Membership Type ID instead of Membership Type name
+                Console.Write("Enter New Membership Type ID (leave empty to keep current): ");
+                string newMembershipTypeInput = Console.ReadLine().Trim();
+                if (!string.IsNullOrEmpty(newMembershipTypeInput))
+                {
+                    if (int.TryParse(newMembershipTypeInput, out int newMembershipTypeId) &&
+                        MembershipTypes.Exists(mt => mt.MembershipTypeID == newMembershipTypeId))
+                    {
+                        memberToUpdate.MembershipTypeID = newMembershipTypeId;
+                    }
+                    else
+                    {
+                        throw new ArgumentException("Invalid Membership Type ID.");
+                    }
+                }
+
+                Console.Write("Enter New Contact Number (leave empty to keep current): ");
+                string newContactNumber = Console.ReadLine().Trim();
+                if (!string.IsNullOrEmpty(newContactNumber))
+                {
+                    memberToUpdate.ContactNumber = newContactNumber;
+                }
+
+                Console.WriteLine("Member updated successfully.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+        }
+
+
+
+        public void ViewCategories()
+        {
+            Console.WriteLine("\n==== View All Categories ====");
+
+            // Check if categories list is not empty
+            if (Categories.Count > 0)
+            {
+                Console.WriteLine($"{"ID",-10} {"Category Name",-20}");
+                Console.WriteLine(new string('-', 30)); // Separator line
+
+                foreach (var category in Categories)
+                {
+                    Console.WriteLine($"{category.CategoryID,-10} {category.CategoryName,-20}");
+                }
+            }
+            else
+            {
+                Console.WriteLine("No categories available.");
+            }
+        }
+
+        public void ViewAllBooks()
+        {
+            Console.WriteLine("\n==== List of All Books ====");
+
+            if (Books.Count == 0)
+            {
+                Console.WriteLine("No books available in the library.");
+                return;
+            }
+
+            Console.WriteLine($"{"Book ID",-10} {"Title",-30} {"Author",-30} {"ISBN",-20} {"Available Copies",-20} {"Category ID",-15} {"Librarian ID",-15} {"Librarian Name",-30}");
+            Console.WriteLine(new string('-', 150)); // Separator line
+
+            foreach (var book in Books)
+            {
+                // Get the category name based on CategoryID (if applicable)
+                var categoryName = Categories.Find(c => c.CategoryID == book.CategoryID)?.CategoryName ?? "Unknown Category";
+
+                // Get the librarian details
+                Librarian librarian = Librarians.Find(l => l.LibrarianID == book.LibrarianID);
+                string librarianName = librarian != null ? librarian.Name : "Unknown Librarian";
+
+                Console.WriteLine($"{book.BookID,-10} {book.Title,-30} {book.Author,-30} {book.ISBN,-20} {book.AvailableCopies,-20} {categoryName,-15} {book.LibrarianID,-15} {librarianName,-30}");
+            }
+        }
+
+        public void ViewAllMembers()
+        {
+            Console.WriteLine("\n==== List of All Members ====");
+
+            if (Members.Count == 0)
+            {
+                Console.WriteLine("No members registered.");
+                return;
+            }
+
+            Console.WriteLine($"{"Member ID",-10} {"Name",-30} {"Email",-30} {"Membership Type",-20} {"Contact Number",-20} {"Librarian ID",-15} {"Librarian Name",-30}");
+            Console.WriteLine(new string('-', 150)); // Separator line
+
+            foreach (var member in Members)
+            {
+                // Get the membership type name based on MembershipTypeID
+                var membershipType = MembershipTypes.Find(mt => mt.MembershipTypeID == member.MembershipTypeID)?.TypeName ?? "Unknown";
+
+                // Get the librarian details
+                Librarian librarian = Librarians.Find(l => l.LibrarianID == member.LibrarianID);
+                string librarianName = librarian != null ? librarian.Name : "Unknown Librarian";
+
+                Console.WriteLine($"{member.MemberID,-10} {member.Name,-30} {member.Email,-30} {membershipType,-20} {member.ContactNumber,-20} {member.LibrarianID,-15} {librarianName,-30}");
+            }
+        }
+
+
+
+
+
+        public void ViewBorrowTransactions()
+        {
+            Console.WriteLine("\n==== Borrow Transactions ====");
+
+            if (BorrowTransactions.Count == 0)
+            {
+                Console.WriteLine("No borrow transactions found.");
+                return;
+            }
+
+            foreach (var transaction in BorrowTransactions)
+            {
+                // Find the associated member and book
+                Member member = Members.Find(m => m.MemberID == transaction.MemberID);
+                Book book = Books.Find(b => b.BookID == transaction.BookID);
+
+                // Get member's name and book title
+                string memberName = member != null ? member.Name : "Unknown Member";
+                string bookTitle = book != null ? book.Title : "Unknown Book";
+
+                // Get the membership type for the member
+                MembershipType membershipType = MembershipTypes.Find(mt => mt.MembershipTypeID == member.MembershipTypeID);
+
+                // Calculate the due date based on the membership type's allowed return days
+                DateTime dueDate = transaction.DateBorrowed.AddDays(membershipType != null ? membershipType.AllowedReturnDays : 0);
+
+                // Calculate days left until due date
+                int daysLeft = (dueDate - DateTime.Now).Days;
+                string daysLeftText = daysLeft >= 0 ? $"{daysLeft} days left until due date" : $"Overdue by {Math.Abs(daysLeft)} days";
+
+                // Output the transaction details
+                Console.WriteLine($"Transaction ID: {transaction.TransactionID}");
+                Console.WriteLine($"Member ID: {transaction.MemberID}, Name: {memberName}");
+                Console.WriteLine($"Book ID: {transaction.BookID}, Title: {bookTitle}");
+                Console.WriteLine($"Borrowed On: {transaction.DateBorrowed.ToShortDateString()}");
+                Console.WriteLine($"Due Date: {dueDate.ToShortDateString()} ({daysLeftText})");
+                Console.WriteLine();
+            }
+        }
+
+        public void ViewReturnDetails()
+        {
+            Console.WriteLine("\n==== Return Details ====");
+
+            if (BorrowTransactions.Count == 0)
+            {
+                Console.WriteLine("No return transactions found.");
+                return;
+            }
+
+            foreach (var transaction in BorrowTransactions)
+            {
+                Member member = Members.Find(m => m.MemberID == transaction.MemberID);
+                Book book = Books.Find(b => b.BookID == transaction.BookID);
+
+                string memberName = member != null ? member.Name : "Unknown Member";
+                string bookTitle = book != null ? book.Title : "Unknown Book";
+
+                // Get the membership type for the member
+                MembershipType membershipType = MembershipTypes.Find(mt => mt.MembershipTypeID == member.MembershipTypeID);
+
+                // Calculate the due date based on the membership type's allowed return days
+                DateTime dueDate = transaction.DateBorrowed.AddDays(membershipType != null ? membershipType.AllowedReturnDays : 0);
+
+                // Calculate days left until due date
+                int daysLeft = (dueDate - DateTime.Now).Days;
+                string daysLeftText = daysLeft >= 0 ? $"{daysLeft} days left until due date" : $"Overdue by {Math.Abs(daysLeft)} days";
+
+                Console.WriteLine($"Transaction ID: {transaction.TransactionID}");
+                Console.WriteLine($"Member ID: {transaction.MemberID}, Name: {memberName}");
+                Console.WriteLine($"Book ID: {transaction.BookID}, Title: {bookTitle}");
+                Console.WriteLine($"Borrowed On: {transaction.DateBorrowed.ToShortDateString()}");
+                Console.WriteLine($"Due Date: {dueDate.ToShortDateString()} ({daysLeftText})");
+                Console.WriteLine($"Returned On: {transaction.ReturnDate?.ToString("g") ?? "Not Returned"}");
+                Console.WriteLine();
+            }
+        }
+
+        public void ViewMembershipTypes()
+        {
+            Console.WriteLine("\n==== Membership Types ====");
+
+            if (MembershipTypes.Count == 0)
+            {
+                Console.WriteLine("No membership types available.");
+                return;
+            }
+
+            Console.WriteLine($"{"ID",-5} {"Type Name",-15} {"Charges",-10} {"Allowed Return Days",-20}");
+            Console.WriteLine(new string('-', 50)); // Separator line
+
+            foreach (var membershipType in MembershipTypes)
+            {
+                Console.WriteLine($"{membershipType.MembershipTypeID,-5} {membershipType.TypeName,-15} {membershipType.Charges,-10:C} {membershipType.AllowedReturnDays,-20}");
+            }
+        }
+
+
+
+        public void ImposeFine()
+        {
+            Console.WriteLine("\n==== Impose a Fine ====");
+
+            try
+            {
+                Console.Write("Enter Transaction ID: ");
+                if (!int.TryParse(Console.ReadLine(), out int transactionId))
+                {
+                    throw new FormatException("Invalid Transaction ID format. Please enter a number.");
+                }
+
+                // Find the transaction using the given Transaction ID
+                BorrowTransaction transaction = BorrowTransactions.Find(t => t.TransactionID == transactionId);
+                if (transaction == null)
+                {
+                    throw new KeyNotFoundException("Transaction ID does not exist.");
+                }
+
+                // Determine the member associated with this transaction
+                var member = Members.Find(m => m.MemberID == transaction.MemberID);
+                if (member == null)
+                {
+                    throw new KeyNotFoundException("Member associated with this transaction does not exist.");
+                }
+
+                // Get the membership type to determine allowed return days
+                var membershipType = MembershipTypes.Find(mt => mt.MembershipTypeID == member.MembershipTypeID);
+                if (membershipType == null)
+                {
+                    throw new KeyNotFoundException("Membership type associated with this member does not exist.");
+                }
+
+                // Calculate the due date based on the transaction's borrow date and allowed return days
+                DateTime dueDate = transaction.DateBorrowed.AddDays(membershipType.AllowedReturnDays);
+
+                if (transaction.ReturnDate > dueDate)
+                {
+                    // Calculate fine amount based on overdue days
+                    int overdueDays = (transaction.ReturnDate.Value - dueDate).Days;
+                    var fineAmount = overdueDays * 50; // Example: $50 per overdue day
+
+                    Fine fine = new Fine
+                    {
+                        FineID = fineCounter++,
+                        TransactionID = transaction.TransactionID,
+                        FineAmount = fineAmount,
+                        PaymentStatus = false
+                    };
+
+                    // You might want to store the fine in a fines list here
+                    Console.WriteLine($"Fine of {fineAmount:C} imposed for Transaction ID: {transactionId}");
+                }
+                else
+                {
+                    Console.WriteLine("No fine applicable for this transaction.");
+                }
+
+            }
+            catch (FormatException ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}. Please try again.");
+            }
+            catch (KeyNotFoundException ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}. Please enter a valid Transaction ID.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}. Please check the transaction details.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An unexpected error occurred: {ex.Message}");
+            }
+        }
+    }
+
+
+        class Program
+        {
+            static void Main(string[] args)
+            {
+                LibraryManagementSystem library = new LibraryManagementSystem();
+
+                // Librarian Login
+                bool loggedIn = false;
+                while (!loggedIn)
+                {
+                    loggedIn = library.LibrarianLogin();
+                }
+
+                bool exit = false;
+                while (!exit)
+                {
+                    library.DisplayMenu();
+                    Console.Write("\nChoose an option: ");
+                    string option = Console.ReadLine();
+
+                    switch (option)
+                    {
+                        case "1":
+                            library.AddCategory();
+                            break;
+                        case "2":
+                            library.AddBook();
+                            break;
+                        case "3":
+                            library.AddMember();
+                            break;
+                        case "4":
+                            library.BorrowBook();
+                            break;
+                        case "5":
+                            library.ReturnBook();
+                            break;
+                        case "6":
+                            library.RemoveBook();
+                            break;
+                        case "7":
+                            library.UpdateBook();
+                            break;
+                        case "8":
+                            library.RemoveMember();
+                            break;
+                        case "9":
+                            library.UpdateMember();
+                            break;
+                        case "10":
+                            library.ViewAllBooks();
+                            break;
+                        case "11":
+                            library.ViewAllMembers();
+                            break;
+                        case "12":
+                            library.ViewBorrowTransactions();
+                            break;
+                        case "13":
+                            library.ViewReturnDetails();
+                            break;
+                        case "14":
+                            library.ViewCategories();
+                            break;
+                        case "15":
+                            library.ViewMembershipTypes();
+                            break;
+                        case "16":
+                                    library.ImposeFine();
+                                    break;
+                        case "17":
+                            exit = true;
+                            Console.WriteLine("Exiting the system...");
+                            break;
+                        default:
+                            Console.WriteLine("Invalid option. Please try again.");
+                            break;
+                    }
+                    Console.ReadLine();
+                }
+            }
+        }
+    }
+
