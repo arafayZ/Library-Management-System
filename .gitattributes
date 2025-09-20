@@ -1,7 +1,7 @@
 # Treat C# code in .txt files as C#
-*CSharp*.txt linguist-language=C#
-*.cs.txt    linguist-language=C#
+*LMS+DBMS_C#*.txt linguist-language=C#
+
 
 # Treat DB scripts as SQL
-*DB*.txt    linguist-language=SQL
-*.sql.txt   linguist-language=SQL
+*DLD_scripts*.txt    linguist-language=SQL
+
